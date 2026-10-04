@@ -77,6 +77,14 @@ confirm() {
   [[ "$ans" =~ ^[yY]([eE][sS])?$ ]]
 }
 
+find_file_ci() {
+  local dir="$1"
+  local target="$2"
+  if [[ -d "$dir" ]]; then
+    find "$dir" -maxdepth 1 -iname "$target" 2>/dev/null | head -n 1
+  fi
+}
+
 # ---------- Detect Distro and Package Manager ----------
 detect_pkg_mgr_install_cmd() {
   local os_id=""
@@ -199,16 +207,31 @@ if (( AVAIL_GB < 15 )); then
   warn "Free disk space in $(dirname "$WORK_DIR") is only ~${AVAIL_GB} GB. Recommended is at least 25-30 GB."
 fi
 
-# Prepare work directory
-if [[ -d "$TINY_DIR" || -d "$SCRATCH_DIR" ]]; then
-  if confirm "Work directory already has previous files. Clean and start fresh?"; then
-    rm -rf "$TINY_DIR" "$SCRATCH_DIR"
-  else
-    die "Please choose another work directory with -w <dir> or clean $WORK_DIR."
+INSTALL_WIM="$TINY_DIR/sources/install.wim"
+INSTALL_ESD="$TINY_DIR/sources/install.esd"
+BOOT_WIM="$TINY_DIR/sources/boot.wim"
+
+# Check if previous processed install image exists
+SKIP_INSTALL_WIM=0
+if [[ -f "$TINY_DIR/sources/install.swm" || -f "$TINY_DIR/sources/install.wim" ]]; then
+  if [[ -f "$WORK_DIR/sw.json" ]]; then
+    if confirm "Previous debloated install image found in work directory. Resume from boot.wim / ISO creation?"; then
+      SKIP_INSTALL_WIM=1
+    fi
   fi
 fi
 
-mkdir -p "$TINY_DIR" "$SCRATCH_DIR"
+# Prepare work directory
+if (( ! SKIP_INSTALL_WIM )); then
+  if [[ -d "$TINY_DIR" || -d "$SCRATCH_DIR" ]]; then
+    if confirm "Work directory already has previous files. Clean and start fresh?"; then
+      rm -rf "$TINY_DIR" "$SCRATCH_DIR"
+    else
+      die "Please choose another work directory with -w <dir> or clean $WORK_DIR."
+    fi
+  fi
+  mkdir -p "$TINY_DIR" "$SCRATCH_DIR"
+fi
 
 # Tee output to log
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -230,33 +253,30 @@ if [[ ! -f "$SCRIPT_DIR/autounattend.xml" ]]; then
     https://raw.githubusercontent.com/ntdevlabs/tiny11builder/refs/heads/main/autounattend.xml
 fi
 
-# ---------- Extract / Copy Source ----------
-if [[ -f "$SOURCE" ]]; then
-  log "Extracting ISO to working directory using $SEVENZ (this might take a couple minutes)..."
-  "$SEVENZ" x -y -o"$TINY_DIR" "$SOURCE" >/dev/null
-elif [[ -d "$SOURCE" ]]; then
-  log "Copying source directory to working directory..."
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a "$SOURCE"/ "$TINY_DIR"/
-  else
-    cp -R "$SOURCE"/ "$TINY_DIR"/
+if (( ! SKIP_INSTALL_WIM )); then
+  # ---------- Extract / Copy Source ----------
+  if [[ -f "$SOURCE" ]]; then
+    log "Extracting ISO to working directory using $SEVENZ (this might take a couple minutes)..."
+    "$SEVENZ" x -y -o"$TINY_DIR" "$SOURCE" >/dev/null
+  elif [[ -d "$SOURCE" ]]; then
+    log "Copying source directory to working directory..."
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a "$SOURCE"/ "$TINY_DIR"/
+    else
+      cp -R "$SOURCE"/ "$TINY_DIR"/
+    fi
   fi
-fi
 
-# Ensure files are writable
-chmod -R u+w "$TINY_DIR" 2>/dev/null || true
+  # Ensure files are writable
+  chmod -R u+w "$TINY_DIR" 2>/dev/null || true
 
-INSTALL_WIM="$TINY_DIR/sources/install.wim"
-INSTALL_ESD="$TINY_DIR/sources/install.esd"
-BOOT_WIM="$TINY_DIR/sources/boot.wim"
+  if [[ ! -f "$BOOT_WIM" ]]; then
+    die "sources/boot.wim not found in source image."
+  fi
 
-if [[ ! -f "$BOOT_WIM" ]]; then
-  die "sources/boot.wim not found in source image."
-fi
-
-if [[ ! -f "$INSTALL_WIM" && ! -f "$INSTALL_ESD" ]]; then
-  die "Neither install.wim nor install.esd found in sources/."
-fi
+  if [[ ! -f "$INSTALL_WIM" && ! -f "$INSTALL_ESD" ]]; then
+    die "Neither install.wim nor install.esd found in sources/."
+  fi
 
 # Handle ESD -> WIM conversion if necessary
 if [[ ! -f "$INSTALL_WIM" && -f "$INSTALL_ESD" ]]; then
@@ -398,18 +418,20 @@ log "Applying registry tweaks and bypasses to install.wim..."
 
 apply_hive() {
   local hive_file="$1" json_file="$2"
-  if [[ ! -f "$hive_file" ]]; then
-    warn "Hive file not found, skipping: $hive_file"
+  if [[ -z "$hive_file" || ! -f "$hive_file" ]]; then
+    warn "Hive file not found, skipping: ${hive_file:-<empty>}"
     return 0
   fi
   python3 "$SCRIPT_DIR/tiny11_hive.py" "$hive_file" < "$json_file"
 }
 
-SW_HIVE="$APPLY_DIR/Windows/System32/config/SOFTWARE"
-SYS_HIVE="$APPLY_DIR/Windows/System32/config/SYSTEM"
-DEFAULT_HIVE="$APPLY_DIR/Windows/System32/config/default"
-NTUSER_HIVE="$APPLY_DIR/Users/Default/NTUSER.DAT"
-[[ -f "$NTUSER_HIVE" ]] || NTUSER_HIVE="$APPLY_DIR/Users/Default/ntuser.dat"
+CONFIG_DIR="$APPLY_DIR/Windows/System32/config"
+USER_DEFAULT_DIR="$APPLY_DIR/Users/Default"
+
+SW_HIVE="$(find_file_ci "$CONFIG_DIR" "SOFTWARE")"
+SYS_HIVE="$(find_file_ci "$CONFIG_DIR" "SYSTEM")"
+DEFAULT_HIVE="$(find_file_ci "$CONFIG_DIR" "DEFAULT")"
+NTUSER_HIVE="$(find_file_ci "$USER_DEFAULT_DIR" "NTUSER.DAT")"
 
 # SOFTWARE hive tweaks
 cat > "$WORK_DIR/sw.json" <<'EOF'
@@ -514,24 +536,29 @@ rm -rf "$APPLY_DIR"
 # Check if install.wim exceeds 4 GiB (ISO 9660 limit) and split if necessary
 INSTALL_WIM_SIZE=$(stat -c%s "$INSTALL_WIM" 2>/dev/null || stat -f%z "$INSTALL_WIM")
 ISO_FILE_LIMIT=$((4 * 1024 * 1024 * 1024 - 1))
-if (( INSTALL_WIM_SIZE > ISO_FILE_LIMIT )); then
-  info "install.wim is $((INSTALL_WIM_SIZE / 1024 / 1024)) MiB (> 4 GiB)."
-  log "Splitting install.wim into install.swm parts for standard compatibility..."
-  wimlib-imagex split "$INSTALL_WIM" "$TINY_DIR/sources/install.swm" 3800
-  rm -f "$INSTALL_WIM"
-  info "Split files created in sources/:"
-  ls -lh "$TINY_DIR/sources/"install*.swm
+  if (( INSTALL_WIM_SIZE > ISO_FILE_LIMIT )); then
+    info "install.wim is $((INSTALL_WIM_SIZE / 1024 / 1024)) MiB (> 4 GiB)."
+    log "Splitting install.wim into install.swm parts for standard compatibility..."
+    wimlib-imagex split "$INSTALL_WIM" "$TINY_DIR/sources/install.swm" 3800
+    rm -f "$INSTALL_WIM"
+    info "Split files created in sources/:"
+    ls -lh "$TINY_DIR/sources/"install*.swm
+  fi
 fi
 
 # ---------- Modify boot.wim (Setup Image) ----------
 log "Applying hardware bypasses to boot.wim (index 2)..."
-mkdir -p "$BOOT_APPLY_DIR"
-wimlib-imagex apply "$BOOT_WIM" 2 "$BOOT_APPLY_DIR"
+if [[ ! -d "$BOOT_APPLY_DIR/Windows/System32" ]]; then
+  mkdir -p "$BOOT_APPLY_DIR"
+  wimlib-imagex apply "$BOOT_WIM" 2 "$BOOT_APPLY_DIR"
+fi
 
-BOOT_SYS_HIVE="$BOOT_APPLY_DIR/Windows/System32/config/SYSTEM"
-BOOT_DEFAULT_HIVE="$BOOT_APPLY_DIR/Windows/System32/config/default"
-BOOT_NTUSER_HIVE="$BOOT_APPLY_DIR/Users/Default/NTUSER.DAT"
-[[ -f "$BOOT_NTUSER_HIVE" ]] || BOOT_NTUSER_HIVE="$BOOT_APPLY_DIR/Users/Default/ntuser.dat"
+BOOT_CONFIG_DIR="$BOOT_APPLY_DIR/Windows/System32/config"
+BOOT_USER_DIR="$BOOT_APPLY_DIR/Users/Default"
+
+BOOT_SYS_HIVE="$(find_file_ci "$BOOT_CONFIG_DIR" "SYSTEM")"
+BOOT_DEFAULT_HIVE="$(find_file_ci "$BOOT_CONFIG_DIR" "DEFAULT")"
+BOOT_NTUSER_HIVE="$(find_file_ci "$BOOT_USER_DIR" "NTUSER.DAT")"
 
 cat > "$WORK_DIR/boot_sys.json" <<'EOF'
 [
@@ -551,21 +578,26 @@ cat > "$WORK_DIR/boot_default.json" <<'EOF'
 ]
 EOF
 
-apply_hive "$BOOT_DEFAULT_HIVE" "$WORK_DIR/boot_default.json"
-apply_hive "$BOOT_NTUSER_HIVE"  "$WORK_DIR/boot_default.json"
-apply_hive "$BOOT_SYS_HIVE"     "$WORK_DIR/boot_sys.json"
+[[ -n "$BOOT_DEFAULT_HIVE" ]] && apply_hive "$BOOT_DEFAULT_HIVE" "$WORK_DIR/boot_default.json"
+[[ -n "$BOOT_NTUSER_HIVE" ]]  && apply_hive "$BOOT_NTUSER_HIVE"  "$WORK_DIR/boot_default.json"
+[[ -n "$BOOT_SYS_HIVE" ]]     && apply_hive "$BOOT_SYS_HIVE"     "$WORK_DIR/boot_sys.json"
 
 log "Updating boot.wim with modified registry hives..."
 update_cmds="$WORK_DIR/boot_update.txt"
-{
-  echo "add \"$BOOT_DEFAULT_HIVE\" \"Windows/System32/config/default\""
-  echo "add \"$BOOT_SYS_HIVE\"     \"Windows/System32/config/SYSTEM\""
-  if [[ -f "$BOOT_NTUSER_HIVE" ]]; then
-    rel_ntuser="Users/Default/$(basename "$BOOT_NTUSER_HIVE")"
-    echo "add \"$BOOT_NTUSER_HIVE\" \"$rel_ntuser\""
-  fi
-} > "$update_cmds"
-wimlib-imagex update "$BOOT_WIM" 2 < "$update_cmds"
+: > "$update_cmds"
+if [[ -n "$BOOT_DEFAULT_HIVE" && -f "$BOOT_DEFAULT_HIVE" ]]; then
+  echo "add \"$BOOT_DEFAULT_HIVE\" \"Windows/System32/config/$(basename "$BOOT_DEFAULT_HIVE")\"" >> "$update_cmds"
+fi
+if [[ -n "$BOOT_SYS_HIVE" && -f "$BOOT_SYS_HIVE" ]]; then
+  echo "add \"$BOOT_SYS_HIVE\" \"Windows/System32/config/$(basename "$BOOT_SYS_HIVE")\"" >> "$update_cmds"
+fi
+if [[ -n "$BOOT_NTUSER_HIVE" && -f "$BOOT_NTUSER_HIVE" ]]; then
+  echo "add \"$BOOT_NTUSER_HIVE\" \"Users/Default/$(basename "$BOOT_NTUSER_HIVE")\"" >> "$update_cmds"
+fi
+
+if [[ -s "$update_cmds" ]]; then
+  wimlib-imagex update "$BOOT_WIM" 2 < "$update_cmds"
+fi
 rm -rf "$BOOT_APPLY_DIR"
 
 # Copy autounattend.xml to root of ISO
