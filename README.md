@@ -1,46 +1,95 @@
-# tiny11builder
-*Scripts to build a trimmed-down Windows 11 image - now in **PowerShell**!*
+# tiny11builder.sh
 
-## Introduction :
-Tiny11 builder, now completely overhauled. <br> After more than a year (for which I am so sorry) of no updates, tiny11 builder is now a much more complete and flexible solution - one script fits all. Also, it is a steppingstone for an even more fleshed-out solution.
+> **Note:** This repository is a **fork** of the original [ntdevlabs/tiny11builder](https://github.com/ntdevlabs/tiny11builder).
+>
+> It adds native **Linux** (and macOS) support with **`tiny11maker.sh`**, enabling you to build streamlined, debloated Tiny11 images without requiring a Windows host or Microsoft DISM.
 
-You can now use it on ANY Windows 11 release (not just a specific build), as well as ANY language or architecture.
-This is made possible thanks to the much-improved scripting capabilities of PowerShell, compared to the older Batch release.
+---
 
-This is a script created to automate the build of a streamlined Windows 11 image, similar to tiny10.
-The script has also been updated to use DISM's recovery compression, resulting in a much smaller final ISO size, and no utilities from external sources. The only other executable included is **oscdimg.exe**, which is provided in the Windows ADK and it is used to create bootable ISO images. 
-Also included is an unattended answer file, which is used to bypass the Microsoft Account on OOBE and to deploy the image with the `/compact` flag.
-It's open-source, **so feel free to add or remove anything you want!** Feedback is also much appreciated.
+## 🐧 Linux / macOS Instructions (`tiny11maker.sh`)
 
-Also, for the very first time, **introducing tiny11 core builder**! A more powerful script, designed for a quick and dirty development testbed. Just the bare minimum, none of the fluff. 
-This script generates a significantly reduced Windows 11 image. However, **it's not suitable for regular use due to its lack of serviceability - you can't add languages, updates, or features post-creation**. tiny11 Core is not a full Windows 11 substitute but a rapid testing or development tool, potentially useful for VM environments.
+`tiny11maker.sh` is a native Bash port of `tiny11maker.ps1`. It performs the same image modifications and bloatware removals using open-source utilities:
+
+* **`wimlib-imagex`**: Mounts, applies, compresses (`LZMS`), and updates WIM archives (`install.wim`, `boot.wim`).
+* **`tiny11_hive.py` / `libhivex`**: Surgically applies offline registry edits and hardware bypasses (TPM, CPU, RAM, Secure Boot, OOBE local accounts).
+* **`7z` / `7zz`**: Extracts the source Windows 11 ISO in user-space without needing root/loop mounts.
+* **`xorriso`**: Repacks the final dual-bootable ISO (Legacy BIOS and UEFI).
+* **Split WIM handling**: Automatically splits `install.wim` into `install.swm` files if it exceeds the 4 GiB ISO 9660 limit, ensuring FAT32 USB compatibility.
+
+### Prerequisites
+
+Install the required tools for your distribution:
+
+* **Fedora / RHEL**:
+  ```bash
+  sudo dnf install wimlib-utils hivex 7zip xorriso python3
+  ```
+
+* **Ubuntu / Debian**:
+  ```bash
+  sudo apt update && sudo apt install wimtools libhivex-bin 7zip xorriso python3
+  ```
+
+* **Arch Linux**:
+  ```bash
+  sudo pacman -S wimlib hivex 7zip xorriso python
+  ```
+
+* **macOS (Homebrew)**:
+  ```bash
+  brew install wimlib hivex 7zip xorriso python3
+  ```
+
+### Usage
+
+Make sure the script is executable:
+```bash
+chmod +x tiny11maker.sh tiny11_hive.py
+```
+
+#### Interactive Mode:
+Simply run the script. It will prompt you for the ISO path and the Windows edition to keep:
+```bash
+./tiny11maker.sh
+```
+
+#### Non-Interactive / CLI Options:
+```bash
+./tiny11maker.sh -s /path/to/Win11_English_x64.iso -o ./tiny11.iso
+```
+
+Available flags:
+* `-s <source>`: Path to Windows 11 ISO or extracted directory.
+* `-o <output>`: Output ISO destination (default: `./tiny11.iso`).
+* `-i <index>`: Image SKU index from `install.wim` (e.g., `1` for Home, `6` for Pro).
+* `-w <work_dir>`: Temporary scratch folder (needs ~25-30 GB free space; default: `./tiny11-work`).
+* `-y`: Assume Yes to all confirmation prompts.
+* `-h`: Display help.
+
+---
+
+## 🪟 Windows Instructions (`tiny11maker.ps1`)
+
+If you are running on Windows, you can use the original PowerShell scripts:
+
+1. Download Windows 11 from the [Microsoft website](https://www.microsoft.com/software-download/windows11) or [Rufus](https://github.com/pbatard/rufus).
+2. Mount the downloaded ISO image using Windows Explorer.
+3. Open **PowerShell 5.1** as Administrator.
+4. Set execution policy:
+   ```powershell
+   Set-ExecutionPolicy Bypass -Scope Process
+   ```
+5. Run the script:
+   ```powershell
+   .\tiny11maker.ps1 -ISO <letter> -SCRATCH <letter>
+   ```
 
 ---
 
 ## ⚠️ Script versions:
-- **tiny11maker.ps1** : The regular script, which removes a lot of bloat but keeps the system serviceable. You can add languages, updates, and features post-creation. This is the recommended script for regular use.
-- ⚠️ **tiny11coremaker.ps1** : The core script, which removes even more bloat but also removes the ability to service the image. You cannot add languages, updates, or features post-creation. This is recommended for quick testing or development use.
-
-## Instructions:
-1. Download Windows 11 from the [Microsoft website](https://www.microsoft.com/software-download/windows11) or [Rufus](https://github.com/pbatard/rufus)
-2. Mount the downloaded ISO image using Windows Explorer.
-3. Open **PowerShell 5.1** as Administrator. 
-5. Change the script execution policy :
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process
-```
-> Using `-Scope Process` you keep your original policy intact as this change only lasts for the current PowerShell session. 
-
-6. Start the script :
-```powershell
-C:/path/to/your/tiny11/script.ps1 -ISO <letter> -SCRATCH <letter>
-``` 
-> You can see of the script by running the `get-help` command.
-
-6. Select the drive letter where the image is mounted (only the letter, no colon (:))
-7. Select the SKU that you want the image to be based.
-8. Sit back and relax :)
-9. When the image is completed, you will see it in the folder where the script was extracted, with the name tiny11.iso
+- **tiny11maker.sh** : Native Linux/macOS bash script for building tiny11 without Windows.
+- **tiny11maker.ps1** : Standard Windows PowerShell script for regular use (serviceable image).
+- **tiny11coremaker.ps1** : Windows PowerShell core builder for ultra-stripped testing images (non-serviceable).
 
 ---
 
@@ -92,31 +141,8 @@ C:/path/to/your/tiny11/script.ps1 -ISO <letter> -SCRATCH <letter>
   </tbody>
 </table>
 
-Keep in mind that **you cannot add back features in tiny11 core**! <br>
-You will be asked during image creation if you want to enable .net 3.5 support!
-
 ---
 
-## Known issues:
-- Although Edge is removed, there are some remnants in the Settings, but the app in itself is deleted. 
-- You might have to update Winget before being able to install any apps, using Microsoft Store.
-- Outlook and Dev Home might reappear after some time. This is an ongoing battle, though the latest script update tries to prevent this more aggressively.
-- If you are using this script on arm64, you might see a glimpse of an error while running the script. This is caused by the fact that the arm64 image doesn't have OneDriveSetup.exe included in the System32 folder.
-
----
-
-## Features to be implemented:
-- ~~disabling telemetry~~ (Implemented in the 04-29-24 release!)
-- ~~more ad suppression~~ (Partially implemented in the 09-06-25 release!)
-- improved language and arch detection
-- more flexibility in what to keep and what to delete
-- maybe a GUI???
-
-And that's pretty much it for now!
-## ❤️ Support the Project
-
-If this project has helped you, please consider showing your support! A small donation helps me dedicate more time to projects like this.
-Thank you!
-
-**[Patreon](http://patreon.com/ntdev) | [PayPal](http://paypal.me/ntdev2) | [Ko-fi](http://ko-fi.com/ntdev)**
-Thanks for trying it and let me know how you like it!
+## Credits & Upstream
+* Original creator and project: [ntdevlabs/tiny11builder](https://github.com/ntdevlabs/tiny11builder)
+* Original author: **ntdev** ([Patreon](http://patreon.com/ntdev) | [PayPal](http://paypal.me/ntdev2) | [Ko-fi](http://ko-fi.com/ntdev))
