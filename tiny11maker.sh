@@ -85,6 +85,15 @@ find_file_ci() {
   fi
 }
 
+apply_hive() {
+  local hive_file="$1" json_file="$2"
+  if [[ -z "$hive_file" || ! -f "$hive_file" ]]; then
+    warn "Hive file not found, skipping: ${hive_file:-<empty>}"
+    return 0
+  fi
+  python3 "$SCRIPT_DIR/tiny11_hive.py" "$hive_file" < "$json_file"
+}
+
 # ---------- Detect Distro and Package Manager ----------
 detect_pkg_mgr_install_cmd() {
   local os_id=""
@@ -416,14 +425,6 @@ cp -f "$SCRIPT_DIR/autounattend.xml" "$APPLY_DIR/Windows/System32/Sysprep/autoun
 # ---------- Registry Tweaks on install.wim ----------
 log "Applying registry tweaks and bypasses to install.wim..."
 
-apply_hive() {
-  local hive_file="$1" json_file="$2"
-  if [[ -z "$hive_file" || ! -f "$hive_file" ]]; then
-    warn "Hive file not found, skipping: ${hive_file:-<empty>}"
-    return 0
-  fi
-  python3 "$SCRIPT_DIR/tiny11_hive.py" "$hive_file" < "$json_file"
-}
 
 CONFIG_DIR="$APPLY_DIR/Windows/System32/config"
 USER_DEFAULT_DIR="$APPLY_DIR/Users/Default"
