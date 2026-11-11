@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Tiny11 Builder
+Comment=Build lightweight, debloated Windows 11 images natively on Linux
+Exec=/home/lex/tiny11builder.sh/tiny11gui.py
+Icon=/home/lex/tiny11builder.sh/data/io.github.lexp_hub.tiny11builder.svg
+Terminal=false
+Type=Application
+Categories=Utility;System;
+Keywords=Windows;ISO;Tiny11;Debloat;WIM;Rufus;
+StartupNotify=true
+StartupWMClass=io.github.lexp_hub.tiny11builder

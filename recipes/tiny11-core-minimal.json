@@ -1,0 +1,12 @@
+{
+  "name": "Tiny11 Core Minimal",
+  "description": "Maximum size reduction: complete removal of UWP apps, Edge, OneDrive, telemetry, and non-essential background services",
+  "remove_bloatware": true,
+  "remove_edge": true,
+  "remove_onedrive": true,
+  "remove_copilot": true,
+  "remove_telemetry": true,
+  "bypass_hardware": true,
+  "bypass_nro": true,
+  "include_autounattend": true
+}

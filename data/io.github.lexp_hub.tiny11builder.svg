@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Flat Solid Base Squircle -->
+  <rect x="14" y="14" width="100" height="100" rx="26" fill="#1b202c" filter="url(#shadow)"/>
+
+  <!-- Centered Flat Windows 11 Tiles (No gradients, no circles) -->
+  <rect x="38" y="38" width="23" height="23" rx="4" fill="#0078d4"/>
+  <rect x="67" y="38" width="23" height="23" rx="4" fill="#0078d4"/>
+  <rect x="38" y="67" width="23" height="23" rx="4" fill="#0078d4"/>
+  <rect x="67" y="67" width="23" height="23" rx="4" fill="#0078d4"/>
+</svg>

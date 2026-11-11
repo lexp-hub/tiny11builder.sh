@@ -1,0 +1,12 @@
+{
+  "name": "Tiny11 Standard",
+  "description": "Recommended preset: removes bloatware, Edge, OneDrive, telemetry, and applies all system bypasses",
+  "remove_bloatware": true,
+  "remove_edge": true,
+  "remove_onedrive": true,
+  "remove_copilot": true,
+  "remove_telemetry": true,
+  "bypass_hardware": true,
+  "bypass_nro": true,
+  "include_autounattend": true
+}

@@ -1,0 +1,12 @@
+{
+  "name": "Tiny11 Conservative",
+  "description": "Removes promotional bloatware and telemetry while preserving Microsoft Edge, OneDrive, and Copilot",
+  "remove_bloatware": true,
+  "remove_edge": false,
+  "remove_onedrive": false,
+  "remove_copilot": false,
+  "remove_telemetry": true,
+  "bypass_hardware": true,
+  "bypass_nro": true,
+  "include_autounattend": true
+}
